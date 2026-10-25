@@ -1,26 +1,45 @@
---Number of Customers in each Recency and percantage from total
-SELECT segment_of_Recency , count("ID") as Number_of_Customer,round(count("ID")/ sum(count("ID")) over() *100,2) as  percent_from_total
-from(
- SELECT 
-            CASE
-            WHEN "Recency" BETWEEN 0 AND MAX( "Recency") OVER () / 4 THEN 'A'
-            WHEN "Recency" BETWEEN MAX( "Recency") OVER () / 4 + 1 AND MAX( "Recency") OVER () / 4 * 2 THEN 'B'
-            WHEN "Recency" BETWEEN MAX( "Recency") OVER () / 4 * 2 +1 AND MAX( "Recency") OVER () / 4 * 3 THEN 'C'
-			ELSE 'D'
-            END AS segment_of_Recency ,"ID"
-  FROM "Fact"
-  ) as tt
-  GROUP BY segment_of_Recency 
-  ORDER BY segment_of_Recency desc
+-- Customer Recency Segmentation
+
+WITH recency_data AS (
+    SELECT
+        "ID",
+        "Recency",
+        MAX("Recency") OVER () AS max_recency
+    FROM "Fact"
+    WHERE "Recency" IS NOT NULL
+),
+
+segmented_customers AS (
+    SELECT
+        "ID",
+        CASE
+            WHEN "Recency" <= max_recency * 0.25 THEN 'A'
+            WHEN "Recency" <= max_recency * 0.50 THEN 'B'
+            WHEN "Recency" <= max_recency * 0.75 THEN 'C'
+            ELSE 'D'
+        END AS recency_segment
+    FROM recency_data
+)
+
+SELECT
+    recency_segment,
+    COUNT(*) AS number_of_customers,
+    ROUND(
+        COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (),
+        2
+    ) AS percent_from_total
+FROM segmented_customers
+GROUP BY recency_segment
+ORDER BY recency_segment;
   
 ---------------------------------------------------------------------------------------
 --Average recency  by customer age group
 SELECT 
     CASE
-    WHEN Age < 24 THEN 'Young'
-    WHEN Age BETWEEN 24 AND 46 THEN 'Middle-Aged'
+    WHEN Age < 28 THEN 'Young'
+    WHEN Age BETWEEN 28 AND 46 THEN 'Middle-Aged'
     ELSE 'Aged'
-  END AS age_group, Round(AVG("Recency"),2) AS avg_recency
+END AS age_group, Round(AVG("Recency"),2) AS avg_recency
 FROM ( 
        select  2014 - cast("Year_Birth" as integer)  as Age,"Recency"
         from "Fact"
@@ -49,7 +68,7 @@ GROUP BY age_group,"Product"
 order by  age_group
 )
 )
-where ranking =1 or ranking=6
+where ranking  <= 2
 ---------------------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------------------
 --Total Amount spent of product and percent from total  via different kidhome
@@ -100,24 +119,48 @@ ORDER BY "ID",total_Amount DESC
 )
 where ranking<3
 ------------------------------------------------------------------------------------------------
---Average income and Average Amount_Spent of customers by marital status
-SELECT "Marital_Status", Round(AVG("Income")) AS avg_income,Round(AVG("Amount")) AS avg_Amount_of_product
-FROM "Fact" f inner join "Dim Product" p
-    on f."ID"=p."ID" 
-GROUP BY "Marital_Status"
-ORDER BY avg_income DESC
+-- Average income and spending per customer by marital status
+
+WITH customer_spending AS (
+    SELECT
+        "ID",
+        SUM("Amount") AS total_spent
+    FROM "Dim Product"
+    GROUP BY "ID"
+)
+
+SELECT
+    f."Marital_Status",
+    ROUND(AVG(f."Income"), 2) AS avg_income,
+    ROUND(AVG(COALESCE(cs.total_spent, 0)), 2)
+        AS avg_spending_per_customer
+FROM "Fact" f
+LEFT JOIN customer_spending cs
+    ON f."ID" = cs."ID"
+GROUP BY f."Marital_Status"
+ORDER BY avg_income DESC;
 
 
 ----------------------------------------------------------------------------------------------
-----------------------------------------------------------------------------------------------
 
---Total purchases in different purchase types
-SELECT "Purchase", SUM("Number of Purchase") AS total_purchases,"Product",sum("Amount") as total_Amount
-FROM "Fact" f inner join "Dim Purchase" p
-    on f."ID"=p."ID" inner join "Dim Product" pd
-    on f."ID"=pd."ID"
-GROUP BY  "Purchase","Product"
-ORDER BY total_purchases DESC , total_Amount  DESC
+-- Total purchases by purchase channel
+
+SELECT
+    "Purchase",
+    SUM("Number of Purchase") AS total_purchases
+FROM "Dim Purchase"
+GROUP BY "Purchase"
+ORDER BY total_purchases DESC;
+
+
+-- Total amount spent by product
+
+SELECT
+    "Product",
+    SUM("Amount") AS total_amount
+FROM "Dim Product"
+GROUP BY "Product"
+ORDER BY total_amount DESC;
 -----------------------------------------------------------------------------------------------
 --- correlation between Num of kids and num of purchases 
 select distinct FF."Kidhome",
