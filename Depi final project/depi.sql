@@ -178,11 +178,13 @@ order by total_accepted DESC
 SELECT income_range, SUM("NumWebVisitsMonth" ) AS "NumWebVisitsMonth" 
 FROM (
     SELECT 
-            CASE
-            WHEN "Income" <=50000 THEN 'Low Income'
-            WHEN "Income" >=50001 and "Income" >=80000 THEN 'Middle Income'
-            ELSE 'High Income'
-            END AS income_range, "NumWebVisitsMonth" 
+	        CASE
+    WHEN "Income" <= 50000 THEN 'Low Income'
+    WHEN "Income" BETWEEN 50001 AND 80000
+        THEN 'Middle Income'
+    WHEN "Income" > 80000 THEN 'High Income'
+    ELSE 'Unknown'
+END AS income_range , "NumWebVisitsMonth" 
     FROM "Fact" f
 ) AS tt
 GROUP BY income_range
